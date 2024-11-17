@@ -1,5 +1,11 @@
 install.packages("dplyr")
 library(dplyr)
+install.packages("tidyr")
+library(tidyr)
+install.packages("caret") 
+library(caret)
+
+
 
 
 Player_15 <- read.csv('../fifa2020/players_15.csv', sep=",")
@@ -16,21 +22,19 @@ Players  <- rbind( Player_15,Player_16,Player_17,Player_18,Player_19,Player_20)
 View(Players)
 View(Teams_and_leagues)
 
+##------------------DATA CLEANING --------------------
 #verificar duplicados
-# Convertir la columna a minúsculas y contar las repeticiones
-Players %>%
-  mutate(player_url_lower = tolower(sofifa_id)) %>%  # Convertir la columna a minúsculas
-  group_by(player_url_lower) %>%  # Agrupar por el valor transformado
-  filter(n() > 1) %>%  # Filtrar los duplicados
-  count(player_url_lower) %>%  # Contar la cantidad de duplicados
-  View()  # M
 
-# Eliminar las filas duplicadas basadas en la columna 'player_url_lower'
+
+# Eliminar las filas duplicadas basadas en la columna 'sofifa_id'
 Players_sin_duplicados <- Players[!duplicated(Players$sofifa_id), ]
 
-# Ver el dataframe sin duplicados
-View(Players_sin_duplicados)
+Players_NA <- colSums(is.na(Players_sin_duplicados))
+Teams_and_leagues_NA <- colSums(is.na(Teams_and_leagues))
 
+
+View(Players_NA)
+View(Teams_and_leagues_NA)
 #-------------- Limpieza de datos 
 
 # para los datos comunes se les asignara un promedio
@@ -72,8 +76,10 @@ mentality_composure_sin_NA <- Players_sin_duplicados$mentality_composure[!is.na(
 mentality_composure_na <- sum(is.na(Players_sin_duplicados$mentality_composure))
 
 
-set.seed(123)  # Para reproducibilidad
+set.seed(123)  
 Players_sin_duplicados$mentality_composure[is.na(Players_sin_duplicados$mentality_composure)] <- sample(mentality_composure_sin_NA, mentality_composure_na, replace = TRUE)
+View(Players_sin_duplicados)
+
 #-------------------------promedio para datos de portero unicamente
 
 # Calcular el promedio de la columna gk_diving sin los NA
@@ -193,37 +199,37 @@ Players_sin_duplicados[["gk_positioning"]] <- sapply(1:nrow(Players_sin_duplicad
 Players_sin_duplicados$contract_valid_until[is.na(Players_sin_duplicados$contract_valid_until)] <- 9999
 
 #------------------------------poner numero de camisola que no se repita
-# Paso 1: Crear una lista de los números de camiseta ocupados por club
+
 Players_sin_duplicados <- Players_sin_duplicados %>%
   group_by(club) %>%
   mutate(
-    # Paso 1: Identificar los números de camiseta ocupados (no NA)
+  
     jersey_numbers_NA = list(team_jersey_number[!is.na(team_jersey_number)])
   ) %>%
   ungroup()
 
-# Paso 2: Crear una lista de los números de camiseta disponibles por club
+
 Players_sin_duplicados <- Players_sin_duplicados %>%
   group_by(club) %>%
   mutate(
-    # Paso 2: Si no hay números ocupados (todos son NA), asignamos un rango completo de números disponibles
+    #
     jersey_numbers_disponibles = ifelse(
-      length(jersey_numbers_NA[[1]]) == 0,  # Si no hay números ocupados
-      list(1:99),  # Rango completo de números disponibles
-      list(setdiff(1:99, jersey_numbers_NA[[1]]))  # Eliminar los números ocupados
+      length(jersey_numbers_NA[[1]]) == 0,  
+      list(1:99), 
+      list(setdiff(1:99, jersey_numbers_NA[[1]])) 
     )
   ) %>%
   ungroup()
 
-# Paso 3: Rellenar los valores NA en team_jersey_number con los números disponibles
+# Rellenar los valores NA en team_jersey_number con los números disponibles
 Players_sin_duplicados <- Players_sin_duplicados %>%
   group_by(club) %>%
   mutate(
     team_jersey_number = ifelse(
       is.na(team_jersey_number), 
-      # Verifica si hay suficientes números disponibles para cubrir todos los NA
+     
       mapply(function(available_numbers, na_count) {
-        # Si hay menos números disponibles que los NA, usamos reemplazo
+       
         if (length(available_numbers) < na_count) {
           sample(available_numbers, na_count, replace = TRUE)
         } else {
@@ -236,37 +242,38 @@ Players_sin_duplicados <- Players_sin_duplicados %>%
   ungroup()
 
 #--------------------------
-# Paso 1: Identificar los números de camiseta ocupados en la selección por cada país
+
 Players_sin_duplicados <- Players_sin_duplicados %>%
   group_by(nationality) %>%
   mutate(
-    # Paso 1: Identificar los números de camiseta ocupados (no NA) por país
+    
     jersey_numbers_NA_nation = list(nation_jersey_number[!is.na(nation_jersey_number)])
   ) %>%
   ungroup()
 
-# Paso 2: Crear una lista de los números de camiseta disponibles por país
+
 Players_sin_duplicados <- Players_sin_duplicados %>%
   group_by(nationality) %>%
   mutate(
-    # Paso 2: Si no hay números ocupados (todos son NA), asignamos un rango completo de números disponibles
+   
     jersey_numbers_disponibles_nation = ifelse(
-      length(jersey_numbers_NA_nation[[1]]) == 0,  # Si no hay números ocupados en la selección
-      list(1:99),  # Rango completo de números disponibles
-      list(setdiff(1:99, jersey_numbers_NA_nation[[1]]))  # Eliminar los números ocupados
+      length(jersey_numbers_NA_nation[[1]]) == 0,  # 
+      list(1:99),  
+      list(setdiff(1:99, jersey_numbers_NA_nation[[1]]))  
     )
   ) %>%
   ungroup()
 
-# Paso 3: Rellenar los valores NA en nation_jersey_number con los números disponibles
+# Rellenar los valores NA en nation_jersey_number con los números disponibles
+
 Players_sin_duplicados <- Players_sin_duplicados %>%
   group_by(nationality) %>%
   mutate(
     nation_jersey_number = ifelse(
       is.na(nation_jersey_number), 
-      # Verifica si hay suficientes números disponibles para cubrir todos los NA
+
       mapply(function(available_numbers, na_count) {
-        # Si hay menos números disponibles que los NA, usamos reemplazo (replace = TRUE)
+   
         if (length(available_numbers) < na_count) {
           sample(available_numbers, na_count, replace = TRUE)
         } else {
@@ -278,29 +285,133 @@ Players_sin_duplicados <- Players_sin_duplicados %>%
   ) %>%
   ungroup()
 
-#--------------------------
+#-------------------------- verifica que los datos esten si NA
+#Eliminación de columans mutadas
+Players_sin_duplicados <- Players_sin_duplicados %>%
+  select(-jersey_numbers_NA, -jersey_numbers_disponibles, -jersey_numbers_NA_nation, -jersey_numbers_disponibles_nation)
+
 Players_NA <- colSums(is.na(Players_sin_duplicados))
-Teams_and_leagues_NA <- colSums(is.na(Teams_and_leagues))
 
 
 View(Players_NA)
 View(Teams_and_leagues_NA)
 
+#------ verificación de formatos incosistentes
+structure_output <- capture.output(str(Players_sin_duplicados))
+cat(structure_output, sep = "\n")
+
+#--- cambio de tipo para fecha
+Players_sin_duplicados$dob <- as.Date(Players_sin_duplicados$dob, format = "%Y-%m-%d")
+str(Players_sin_duplicados$dob)
+
+####---------------------------Data Wrangling----------------------------------------
+
+summary(Players_sin_duplicados)
+
+# - crear nuevas variables
+  # edad en 2024
+Players_sin_duplicados$Edad_2024 <- as.integer(format(Sys.Date(), "%Y")) - as.integer(format(Players_sin_duplicados$dob, "%Y"))
+
+
+
+
+# -- columna potencial de crecimiento 
+Players_sin_duplicados$potencial_crecimento <- Players_sin_duplicados$potential - Players_sin_duplicados$overall
+
+#Crea un índice que combine el valor de mercado y la calificación general del jugador para obtener una medida del "valor relativo" o el rendimiento en relación al costo.
+
+Players_sin_duplicados <- Players_sin_duplicados %>%
+  mutate(
+    valor_relativo = value_eur / overall
+  )
+
+# Promedio de habilidades técnicas del jugador
+#Combina las habilidades técnicas del jugador (por ejemplo, dribbling, shooting, passing, etc.) para obtener una métrica general de sus habilidades técnicas.
+
+Players_sin_duplicados <- Players_sin_duplicados %>%
+  mutate(
+    Promedio_habilidad = rowMeans(select(Players_sin_duplicados, shooting, passing, dribbling), na.rm = TRUE)
+  )
+
+#Valor por edad (Value per Age)
+#Relaciona el valor de mercado con la edad del jugador para ver cuán eficiente es un jugador en relación a su valor y edad.
+Players_sin_duplicados <- Players_sin_duplicados %>%
+  mutate(
+    valor_por_edad = value_eur / age
+  )
+
+
+
+Players_sin_duplicados <- Players_sin_duplicados %>%
+  mutate(valor_mercado_categoria = case_when(
+    value_eur < 300000 ~ "Low",
+    value_eur >= 300000 & value_eur < 10000000 ~ "Medium",
+    value_eur >= 10000000 ~ "High"
+  ))
+
+
 View(Players_sin_duplicados)
 
-#----------- pruebas
-# Obtener los valores únicos de la columna 'nationality'
-
-valores_unicos <-  unique(toupper(Players_sin_duplicados$team_jersey_number))
-
-# Ver los valores únicos
-valores_unicos
 
 
-# Ver el resultado
-print(df)
 
-gk_players <- Players[grepl("GK", Players$player_positions, ignore.case = TRUE), ]
+# - convertir ancho y largo
+# Convertir las habilidades en un formato largo
+Players_sin_duplicados <- Players_sin_duplicados %>% 
+  pivot_longer(cols = c("shooting", "passing", "dribbling", "defending", "physic"),
+               names_to = "habilidad",
+               values_to = "valor")
+Players_sin_duplicados_long <- Players_sin_duplicados_long %>%
+  select(-skill)
 
-# Mostrar el resultado
-View(gk_players)
+
+
+View(Players_sin_duplicados)
+
+
+
+##-----------Data Transformation: 
+
+
+# Seleccionamos solo las columnas numéricas
+numeric_columns <- c("age", "height_cm", "weight_kg", "overall", "potential", "value_eur", "wage_eur", 
+                     "pace", "gk_diving", "gk_handling", "gk_kicking", "gk_reflexes", "gk_speed", "gk_positioning", 
+                     "potencial_crecimento", "valor_relativo", "Promedio_habilidad", "valor_por_edad", "valor", 
+                     "valor_mercado_categoria")
+
+# Filtrar solo las columnas numéricas
+Players_num <- Players_sin_duplicados %>%
+  select(all_of(numeric_columns))
+
+#Normalización: Para normalizar los datos, usaremos la función preProcess() del paquete caret, que permite aplicar técnicas de preprocesamiento como la normalización. Aquí se transforman los datos para que estén en el rango de 0 a 1.
+
+# Normalización de los datos usando preProcess() de caret
+preprocess_model <- preProcess(Players_num, method = c("range"))
+
+# Aplicamos la normalización al dataset
+Players_normalized <- predict(preprocess_model, Players_num)
+
+# Verifica el resultado
+View(Players_normalized)
+
+# Estandarización de los datos (media 0, desviación estándar 1)
+preprocess_model_std <- preProcess(Players_num, method = c("center", "scale"))
+
+# Aplicar la estandarización al dataset
+Players_standardized <- predict(preprocess_model_std, Players_num)
+
+# Ver los primeros resultados
+View(Players_standardized)
+
+
+
+# Estadísticas descriptivas de los datos originales
+summary(Players_num)
+
+# Estadísticas descriptivas de los datos normalizados
+summary(Players_normalized)
+
+# Estadísticas descriptivas de los datos estandarizados
+summary(Players_standardized)
+
+
